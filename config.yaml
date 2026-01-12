@@ -1,0 +1,40 @@
+# Hansel Configuration
+
+project:
+  name: "Hansel"
+  version: "0.1.0"
+
+# LLM Provider Configuration
+# Wechsel zwischen "anthropic" und "google" durch Ändern von "provider"
+llm:
+  provider: "anthropic"  # "anthropic" oder "google"
+
+  # Anthropic Claude Settings
+  anthropic:
+    model: "claude-sonnet-4-20250514"
+    max_tokens: 4096
+    temperature: 0.7
+
+  # Google Gemini Settings
+  google:
+    model: "gemini-2.0-flash"
+    max_tokens: 4096
+    temperature: 0.7
+
+# Paths
+paths:
+  agents: "docs/agents"
+  knowledge: "docs/knowledge"
+  templates: "templates"
+  output: "_hansel-output/discovery-wall"
+
+# Agent Configuration
+agents:
+  manifest: "docs/agents/team-discovery.yaml"
+  default: "nora"
+
+# UI Settings
+ui:
+  title: "Hansel - Product Discovery"
+  layout: "wide"
+  chat_height: 500

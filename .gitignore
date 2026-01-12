@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+
+# Build outputs
+dist/
+build/
+*.js.map
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.key
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+ENV/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# BMAD temporary outputs
+_bmad-output/
+
+# Hansel Discovery Output (keep structure, ignore content)
+_hansel-output/discovery-wall/*
+!_hansel-output/discovery-wall/.gitkeep

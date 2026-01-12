@@ -1,0 +1,55 @@
+bundle:
+  name: Team DISCOVERY
+  icon: "\U0001F9ED"
+  description: Spezialisiertes Team für agile Product Discovery.
+
+agents:
+  - id: nora
+    name: Nora
+    title: Die Navigatorin
+    icon: "\U0001F52D"
+    file: nora.md
+    role: Squash-Point-Masterin & Orientierung
+
+  - id: arthur
+    name: Arthur
+    title: Der Mandats-Architekt
+    icon: "\U0001F396"
+    file: arthur.md
+    role: Briefing & Alignment (Bungay-Experte)
+
+  - id: finn
+    name: Finn
+    title: Der Erkenntnis-Jäger
+    icon: "\U0001F50D"
+    file: finn.md
+    role: User Research & Jobs-to-be-Done
+
+  - id: ida
+    name: Ida
+    title: Die Lösungs-Kreative
+    icon: "\U0001F4A1"
+    file: ida.md
+    role: Ideation & Design
+
+  - id: theo
+    name: Theo
+    title: Der Validierungs-Prüfer
+    icon: "\U0001F9EA"
+    file: theo.md
+    role: Experimente & Validierung
+
+flow:
+  description: |
+    Der typische Discovery-Flow beginnt mit Arthur (Mandat),
+    geht zu Finn (Research), dann Ida (Ideation) und Theo (Validierung).
+    Nora koordiniert und sorgt für Reflexion am Squash-Punkt.
+
+  typical_sequence:
+    - arthur   # Mandat klären
+    - finn     # Kundenbedarf erforschen
+    - ida      # Lösungen entwickeln
+    - theo     # Annahmen validieren
+    # Zurück zu finn oder ida basierend auf Learnings
+
+  coordinator: nora
