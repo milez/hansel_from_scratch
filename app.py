@@ -225,6 +225,79 @@ def render_app():
                 refresh_wall_state()
                 return
 
+        # Check if Arthur is in briefing mode
+        if agent.id == "arthur" and hasattr(agent, 'is_briefing_active'):
+            # Check if awaiting confirmation
+            if agent.is_awaiting_confirmation():
+                if agent.is_confirmation_response(user_input):
+                    # User confirmed - save mandat and handback
+                    response, should_handback = agent.confirm_mandat()
+                    with st.chat_message("assistant", avatar=agent.icon):
+                        st.markdown(response)
+                        add_message(
+                            role="assistant",
+                            content=response,
+                            **agent.get_agent_info()
+                        )
+                    refresh_wall_state()
+
+                    if should_handback:
+                        # Switch back to Nora
+                        set_active_agent("nora")
+                        nora = get_agent("nora")
+                        handback_msg = """*Nora nickt Arthur zu.*
+
+Sehr gut! Das Mandat steht. Ich sehe es auf der **Discovery Wall**.
+
+Jetzt hast du eine klare Basis. Was möchtest du als nächstes erkunden?
+
+- **Problem verstehen** → Wechsel zu Finn (`*wechsel finn`)
+- **Ideen entwickeln** → Wechsel zu Ida (`*wechsel ida`)
+- **Annahmen testen** → Wechsel zu Theo (`*wechsel theo`)
+
+*Tippe `*status` für den Überblick.*"""
+                        add_message(
+                            role="assistant",
+                            content=handback_msg,
+                            **nora.get_agent_info()
+                        )
+                    st.rerun()
+                    return
+                else:
+                    # User wants to correct something
+                    response = """*Arthur nickt.*
+
+Verstanden. Was möchtest du anpassen?
+
+Du kannst:
+- Das ganze Briefing neu starten: `*briefing`
+- Oder mir direkt sagen, was geändert werden soll.
+
+*Ich höre.*"""
+                    with st.chat_message("assistant", avatar=agent.icon):
+                        st.markdown(response)
+                        add_message(
+                            role="assistant",
+                            content=response,
+                            **agent.get_agent_info()
+                        )
+                    # Reset the pending state so user can start over
+                    agent.briefing_state.reset()
+                    return
+
+            # Check if briefing is active (collecting answers)
+            if agent.is_briefing_active():
+                response = agent.process_briefing_answer(user_input)
+                if response:
+                    with st.chat_message("assistant", avatar=agent.icon):
+                        st.markdown(response)
+                        add_message(
+                            role="assistant",
+                            content=response,
+                            **agent.get_agent_info()
+                        )
+                    return
+
         # Get LLM response
         with st.chat_message("assistant", avatar=agent.icon):
             with st.spinner(f"{agent.name} denkt nach..."):
