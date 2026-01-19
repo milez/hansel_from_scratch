@@ -3,6 +3,18 @@
 Main Streamlit application entry point.
 """
 
+import sys
+
+# Python version check - must be before other imports
+MIN_PYTHON = (3, 11)
+if sys.version_info < MIN_PYTHON:
+    import streamlit as st
+    st.set_page_config(page_title="Hansel - Error", page_icon="⚠️")
+    st.error(f"⚠️ Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+ ist erforderlich. "
+             f"Du verwendest Python {sys.version_info.major}.{sys.version_info.minor}.")
+    st.info("Bitte installiere Python 3.11 oder höher und starte die App neu.")
+    st.stop()
+
 import asyncio
 import re
 from typing import Optional

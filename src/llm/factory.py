@@ -3,8 +3,6 @@
 from typing import Any, Dict
 
 from .base import BaseLLMClient
-from .anthropic_client import AnthropicClient
-from .google_client import GoogleClient
 
 
 def create_llm_client(config: Dict[str, Any]) -> BaseLLMClient:
@@ -35,8 +33,10 @@ def create_llm_client(config: Dict[str, Any]) -> BaseLLMClient:
     provider_config = llm_config.get(provider, {})
 
     if provider == "anthropic":
+        from .anthropic_client import AnthropicClient
         return AnthropicClient(provider_config)
     elif provider == "google":
+        from .google_client import GoogleClient
         return GoogleClient(provider_config)
     else:
         raise ValueError(
