@@ -4,6 +4,8 @@ Main Streamlit application entry point.
 """
 
 import asyncio
+import re
+from typing import Optional
 import streamlit as st
 
 from src.utils.config import load_config, get_api_key
@@ -13,6 +15,53 @@ from src.ui.wall import render_discovery_wall, init_wall_state, refresh_wall_sta
 from src.agents.orchestrator import get_active_agent, get_agent, set_active_agent, init_orchestrator_state
 from src.discovery.session import clear_session
 from src.discovery.artifacts import clear_all_artifacts
+
+
+# Agent name to ID mapping for delegation detection
+AGENT_NAME_MAP = {
+    "arthur": "arthur",
+    "nora": "nora",
+    "finn": "finn",
+    "ida": "ida",
+    "theo": "theo",
+}
+
+
+def detect_delegation(response: str) -> Optional[str]:
+    """Detect if LLM response contains a delegation to another agent.
+
+    Looks for patterns like:
+    - "Übergabe an Arthur"
+    - "Arthur übernimmt"
+    - "Wechsel zu Finn"
+
+    Args:
+        response: The LLM response text
+
+    Returns:
+        Agent ID if delegation detected, None otherwise
+    """
+    response_lower = response.lower()
+
+    # Patterns that indicate delegation (handoff phrases only)
+    delegation_patterns = [
+        r"übergabe an (\w+)",
+        r"(\w+),? übernimmst du",
+        r"(\w+) übernimmt",
+        r"wechsel zu (\w+)",
+        r"weiterleiten.* an (\w+)",
+        r"(\w+) betritt",
+        r"zu (\w+) weiterleiten",
+    ]
+
+    for pattern in delegation_patterns:
+        match = re.search(pattern, response_lower)
+        if match:
+            agent_name = match.group(1).lower()
+            if agent_name in AGENT_NAME_MAP:
+                return AGENT_NAME_MAP[agent_name]
+
+    return None
 
 
 def init_session_state():
@@ -103,6 +152,59 @@ async def get_llm_response(user_message: str) -> str:
 
     response = await llm_client.complete(chat_history, system_prompt)
     return response
+
+
+async def compile_mandat_from_chat() -> Optional[str]:
+    """Use LLM to compile a mandat from the chat history.
+
+    Returns:
+        Compiled mandat content or None if extraction fails
+    """
+    llm_client = st.session_state.llm_client
+    chat_history = get_chat_history()
+
+    # Special system prompt for mandat extraction
+    extraction_prompt = """Du bist Arthur, der Mandats-Architekt.
+
+Deine Aufgabe: Extrahiere aus dem bisherigen Gespräch ein strukturiertes Mandat.
+
+Formatiere das Mandat EXAKT so:
+
+## Kontext
+[Warum jetzt? Was ist der Auslöser?]
+
+## My Intent
+[Was soll konkret erreicht werden? Messbar!]
+
+## Higher Intent
+[Worauf zahlt das ein? Das größere Ziel?]
+
+## Key Tasks
+[Die 2-3 wesentlichen Schritte]
+
+## Boundaries
+[Was wird NICHT gemacht? Grenzen?]
+
+---
+
+WICHTIG:
+- Extrahiere NUR was im Gespräch besprochen wurde
+- Wenn ein Element fehlt, schreibe "[Noch zu klären]"
+- Fasse zusammen, erfinde nichts dazu
+- Antworte NUR mit dem formatierten Mandat, keine Einleitung"""
+
+    # Add extraction request to history
+    extraction_request = [{"role": "user", "content": "Fasse jetzt das Mandat aus unserem Gespräch zusammen."}]
+    full_history = chat_history + extraction_request
+
+    try:
+        response = await llm_client.complete(full_history, extraction_prompt)
+        # Check if we got a valid response with at least some content
+        if response and len(response) > 50 and "Kontext" in response:
+            return response
+        return None
+    except Exception:
+        return None
 
 
 def start_new_session():
@@ -210,6 +312,70 @@ def render_app():
                     )
                 return
 
+        # Global handler for *speichern (works from any agent)
+        if user_input.strip().lower() == "*speichern":
+            arthur = get_agent("arthur")
+            # Switch to Arthur if not already
+            if agent.id != "arthur":
+                set_active_agent("arthur")
+
+            # Arthur compiles mandat from chat history via LLM
+            with st.chat_message("assistant", avatar=arthur.icon):
+                with st.spinner("Arthur kompiliert das Mandat..."):
+                    mandat_content = asyncio.run(compile_mandat_from_chat())
+
+                    if mandat_content:
+                        # Save the compiled mandat
+                        response = arthur.save_mandat_from_content(mandat_content)
+                        st.markdown(response)
+                        add_message(
+                            role="assistant",
+                            content=response,
+                            **arthur.get_agent_info()
+                        )
+                        refresh_wall_state()
+
+                        # Switch back to Nora
+                        set_active_agent("nora")
+                        nora = get_agent("nora")
+                        handback_msg = """*Nora nickt Arthur zu.*
+
+Sehr gut! Das Mandat steht. Ich sehe es auf der **Discovery Wall**.
+
+Jetzt hast du eine klare Basis. Was möchtest du als nächstes erkunden?
+
+- **Problem verstehen** → `*wechsel finn`
+- **Ideen entwickeln** → `*wechsel ida`
+- **Annahmen testen** → `*wechsel theo`
+
+*Tippe `*status` für den Überblick.*"""
+                        add_message(
+                            role="assistant",
+                            content=handback_msg,
+                            **nora.get_agent_info()
+                        )
+                        st.rerun()
+                    else:
+                        error_msg = """## ⚠️ Mandat nicht vollständig
+
+Ich konnte kein vollständiges Mandat aus unserem Gespräch extrahieren.
+
+Lass uns die 5 Elemente nochmal durchgehen:
+1. **Kontext** - Warum jetzt?
+2. **My Intent** - Was konkret erreichen?
+3. **Higher Intent** - Worauf zahlt das ein?
+4. **Key Tasks** - Welche 2-3 Schritte?
+5. **Boundaries** - Was nicht?
+
+*Erzähl mir mehr, dann versuchen wir es nochmal.*"""
+                        st.markdown(error_msg)
+                        add_message(
+                            role="assistant",
+                            content=error_msg,
+                            **arthur.get_agent_info()
+                        )
+            return
+
         # Check if it's a regular command
         if agent.is_command(user_input):
             command_response = agent.handle_command(user_input)
@@ -225,79 +391,6 @@ def render_app():
                 refresh_wall_state()
                 return
 
-        # Check if Arthur is in briefing mode
-        if agent.id == "arthur" and hasattr(agent, 'is_briefing_active'):
-            # Check if awaiting confirmation
-            if agent.is_awaiting_confirmation():
-                if agent.is_confirmation_response(user_input):
-                    # User confirmed - save mandat and handback
-                    response, should_handback = agent.confirm_mandat()
-                    with st.chat_message("assistant", avatar=agent.icon):
-                        st.markdown(response)
-                        add_message(
-                            role="assistant",
-                            content=response,
-                            **agent.get_agent_info()
-                        )
-                    refresh_wall_state()
-
-                    if should_handback:
-                        # Switch back to Nora
-                        set_active_agent("nora")
-                        nora = get_agent("nora")
-                        handback_msg = """*Nora nickt Arthur zu.*
-
-Sehr gut! Das Mandat steht. Ich sehe es auf der **Discovery Wall**.
-
-Jetzt hast du eine klare Basis. Was möchtest du als nächstes erkunden?
-
-- **Problem verstehen** → Wechsel zu Finn (`*wechsel finn`)
-- **Ideen entwickeln** → Wechsel zu Ida (`*wechsel ida`)
-- **Annahmen testen** → Wechsel zu Theo (`*wechsel theo`)
-
-*Tippe `*status` für den Überblick.*"""
-                        add_message(
-                            role="assistant",
-                            content=handback_msg,
-                            **nora.get_agent_info()
-                        )
-                    st.rerun()
-                    return
-                else:
-                    # User wants to correct something
-                    response = """*Arthur nickt.*
-
-Verstanden. Was möchtest du anpassen?
-
-Du kannst:
-- Das ganze Briefing neu starten: `*briefing`
-- Oder mir direkt sagen, was geändert werden soll.
-
-*Ich höre.*"""
-                    with st.chat_message("assistant", avatar=agent.icon):
-                        st.markdown(response)
-                        add_message(
-                            role="assistant",
-                            content=response,
-                            **agent.get_agent_info()
-                        )
-                    # Reset the pending state so user can start over
-                    agent.briefing_state.reset()
-                    return
-
-            # Check if briefing is active (collecting answers)
-            if agent.is_briefing_active():
-                response = agent.process_briefing_answer(user_input)
-                if response:
-                    with st.chat_message("assistant", avatar=agent.icon):
-                        st.markdown(response)
-                        add_message(
-                            role="assistant",
-                            content=response,
-                            **agent.get_agent_info()
-                        )
-                    return
-
         # Get LLM response
         with st.chat_message("assistant", avatar=agent.icon):
             with st.spinner(f"{agent.name} denkt nach..."):
@@ -311,6 +404,22 @@ Du kannst:
                         content=response,
                         **agent.get_agent_info()
                     )
+
+                    # Auto-detect delegation in LLM response
+                    delegation_target = detect_delegation(response)
+                    if delegation_target and delegation_target != agent.id:
+                        target_agent = get_agent(delegation_target)
+                        if target_agent:
+                            set_active_agent(delegation_target)
+                            # Show target agent's greeting
+                            greeting = target_agent.get_greeting()
+                            add_message(
+                                role="assistant",
+                                content=greeting,
+                                **target_agent.get_agent_info()
+                            )
+                            st.rerun()
+
                 except Exception as e:
                     error_msg = f"Fehler bei LLM-Anfrage: {e}"
                     st.error(error_msg)
